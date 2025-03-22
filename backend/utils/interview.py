@@ -18,6 +18,7 @@ router = APIRouter()
 
 # In-memory chat history storage
 chat_history = {}
+user_sessions = {} # For stats
 
 class TextInput(BaseModel):
     text: str
@@ -29,6 +30,9 @@ class PromptInput(BaseModel):
     prompt: str
     role: str
     job_desc: str
+
+class StatsInput(BaseModel):
+    session_id: str
 
 # Switch API key function for ElevenLabs
 def switch_api_key():
@@ -88,7 +92,7 @@ async def generate_speech_route(input_data: TextInput):
 
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="Audio file not found.")
-    
+
 @router.post("/process-prompt/")
 async def process_prompt(prompt_input: PromptInput):
     user_id = prompt_input.user_id
@@ -104,6 +108,7 @@ async def process_prompt(prompt_input: PromptInput):
 
     **Job Description:** {prompt_input.job_desc}
 
+    Do not assume a name, post or company name.
     Have a professional and engaging conversation! Be clear and concise.
     Ask thoughtful questions tailored to the job description and make the chat feel focused and productive.
     Keep responses concise and clear, like a real professional conversation.
@@ -125,4 +130,76 @@ async def process_prompt(prompt_input: PromptInput):
 
     chat_history[user_id] = updated_context + f"\nAI: {chatbot_reply}"
 
+    # Update user session for stats
+    if user_id not in user_sessions:
+        user_sessions[user_id] = {"user_messages": []}
+    user_sessions[user_id]["user_messages"].append(user_prompt)
+
     return {"reply": chatbot_reply}
+
+@router.post("/stats/")
+async def generate_stats(stats_input: StatsInput):
+    session_id = stats_input.session_id
+
+    if not session_id or session_id not in user_sessions:
+        raise HTTPException(status_code=400, detail={"error": "Invalid or missing session_id", "status": "error"})
+
+    session = user_sessions[session_id]
+    user_text = "\n".join(session["user_messages"])
+
+    stats_prompt = f"""
+    Analyze the following conversation **ONLY based on the user's messages**.
+    Assess the user's performance in the following areas based on the provided conversation.
+    Provide a **Yes** or **No** assessment for each category.
+
+    **Communication Skills:** (Yes/No)
+    **Technical & Domain Knowledge:** (Yes/No)
+    **Problem-Solving & Critical Thinking:** (Yes/No)
+    **Cultural Fit & Attitude:** (Yes/No)
+
+    Here are the user's messages:
+    {user_text}
+
+    Ensure the response follows this format exactly.
+    """
+
+    formatted_stats = {
+        "Communication Skills": "No",
+        "Technical & Domain Knowledge": "No",
+        "Problem-Solving & Critical Thinking": "No",
+        "Cultural Fit & Attitude": "No"
+    }
+
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content([stats_prompt])
+
+        if not hasattr(response, "text"):
+            raise ValueError("Unexpected API response format")
+
+        text = response.text
+        lines = text.split("\n")
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("**Communication Skills:**"):
+                formatted_stats["Communication Skills"] = line.split(":")[-1].strip().lower().capitalize()
+            elif line.startswith("**Technical & Domain Knowledge:**"):
+                formatted_stats["Technical & Domain Knowledge"] = line.split(":")[-1].strip().lower().capitalize()
+            elif line.startswith("**Problem-Solving & Critical Thinking:**"):
+                formatted_stats["Problem-Solving & Critical Thinking"] = line.split(":")[-1].strip().lower().capitalize()
+            elif line.startswith("**Cultural Fit & Attitude:**"):
+                formatted_stats["Cultural Fit & Attitude"] = line.split(":")[-1].strip().lower().capitalize()
+
+        for key in formatted_stats:
+            if formatted_stats[key] not in ("Yes", "No"):
+                formatted_stats[key] = "No"  # ensure only yes or no is returned.
+
+    except Exception as e:
+        print(f"Stats API Error: {str(e)}")
+        formatted_stats = {"error": str(e)}
+
+    return {"stats": formatted_stats, "status": "success" if "error" not in formatted_stats else "error"}
