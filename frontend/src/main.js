@@ -9,12 +9,6 @@ const MainPage = () => {
         {/* Sidebar */}
         <div className="sidebar">
           <h1>Vora</h1>
-          <nav>
-            <ul>
-              <li className="menu-item">Home</li>
-              <li className="menu-item">User Profile</li>
-            </ul>
-          </nav>
         </div>
 
         {/* Main Content */}
