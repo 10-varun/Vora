@@ -1,2 +1,7 @@
 fastapi
-numpy
+python-dotenv
+google-generativeai
+supabase
+jwt
+fastapi-sessions
+itsdangerous
