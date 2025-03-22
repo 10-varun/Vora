@@ -40,7 +40,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<MainPage navigateBack={navigateBack} />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<SignUp />} />
+      <Route path="/SignUp" element={<SignUp />} />
+      
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/chatbot" element={<ChatbotInt navigateBack={navigateBack} />} />
     </Routes>
