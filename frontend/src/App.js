@@ -4,12 +4,15 @@ import MainPage from "./MainPage"; // Ensure this file exists
 import ChatbotInt from "./ChatbotInt"; // Ensure this file exists
 import Login from "./login"; // Ensure this file exists
 import SignUp from "./Signup"; // Ensure this file exists
+import Dashboard from "./Dashboard"; // Ensure this file exists
 import "./App.css"; // Import styles
 
 function App() {
   return (
     <Router>
-      <AppRoutes />
+      <div className="App">
+        <AppRoutes />
+      </div>
     </Router>
   );
 }
@@ -38,6 +41,7 @@ function AppRoutes() {
       <Route path="/" element={<MainPage navigateBack={navigateBack} />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<SignUp />} />
+      <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/chatbot" element={<ChatbotInt navigateBack={navigateBack} />} />
     </Routes>
   );

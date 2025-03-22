@@ -13,12 +13,6 @@ const MainPage = () => {
         {/* Sidebar */}
         <div className="sidebar">
           <h1>Vora</h1>
-          <nav>
-            <ul>
-              <li className="menu-item">Home</li>
-              <li className="menu-item">User Profile</li>
-            </ul>
-          </nav>
         </div>
 
         {/* Main Content */}
@@ -30,9 +24,6 @@ const MainPage = () => {
 
           {/* Main Options */}
           <div className="menu">
-            <button className="menu-item" onClick={() => navigate("/chatbot")}>
-              Start Interview
-            </button>
             <button className="menu-item">Improve Speaking Skills</button>
             <button className="menu-item">Personalized Learning Path</button>
             <button className="menu-item">Analytics & Feedback</button>

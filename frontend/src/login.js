@@ -74,7 +74,7 @@ function Login() {
       }
       
       console.log("Logged in successfully:", data);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       console.error("Unexpected Error:", err); 
 
