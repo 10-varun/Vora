@@ -1,12 +1,21 @@
 import React from "react";
-import MainPage from "./main"; // Import MainPage component
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import MainPage from "./MainPage"; // Import MainPage component
+import Login from "./login"; // Ensure this file exists
+import SignUp from "./Signup"; // Ensure this file exists
 import "./App.css"; // Import styles
 
 function App() {
   return (
-    <div className="App">
-      <MainPage />
-    </div>
+    <Router>
+      <div className="App">
+        <Routes>
+          <Route path="/" element={<MainPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 
