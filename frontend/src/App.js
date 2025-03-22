@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate } from "react-router-dom";
-import MainPage from "./MainPage";  // ✅ Ensure the file name matches exactly
-import ChatbotInt from "./ChatbotInt"; // ✅ Import Chatbot Page
+import MainPage from "./MainPage"; // Ensure this file exists
+import ChatbotInt from "./ChatbotInt"; // Ensure this file exists
+import Login from "./login"; // Ensure this file exists
+import SignUp from "./Signup"; // Ensure this file exists
+import "./App.css"; // Import styles
 
 function App() {
   return (
@@ -33,6 +36,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<MainPage navigateBack={navigateBack} />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<SignUp />} />
       <Route path="/chatbot" element={<ChatbotInt navigateBack={navigateBack} />} />
     </Routes>
   );
