@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import './Dashboard.css';
+import { useNavigate } from 'react-router-dom'; // Import for navigation
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [activeCategory, setActiveCategory] = useState(null);
+  const navigate = useNavigate(); // Initialize navigation
   
   // Initial learning path data structure with useState for state management
   const [learningPathsData, setLearningPathsData] = useState({
@@ -19,7 +21,6 @@ const Dashboard = () => {
           { id: 4, name: "Feedback Techniques", completed: false }
         ]
       },
-
     ],
     interview: [
       { 
@@ -33,7 +34,6 @@ const Dashboard = () => {
           { id: 4, name: "Code Optimization", completed: false }
         ]
       },
-  
     ],
     salaryNegotiation: [
       { 
@@ -68,6 +68,16 @@ const Dashboard = () => {
     });
   };
 
+  // New function to handle continue button click
+  const handleContinueClick = (category, pathId) => {
+    if (category === 'interview') {
+      // Navigate to chatbot page for interview category
+      navigate('/chatbot');
+    } else {
+      // For other categories, show an alert that the page is not ready
+      alert('This feature is coming soon!');
+    }
+  };
 
   // Category descriptions
   const categoryDescriptions = {
@@ -120,7 +130,12 @@ const Dashboard = () => {
                 ))}
               </div>
               
-              <button className="btn btn-secondary btn-sm">Continue</button>
+              <button 
+                className="btn btn-secondary btn-sm"
+                onClick={() => handleContinueClick(category, path.id)}
+              >
+                Continue
+              </button>
             </div>
           );
         })}

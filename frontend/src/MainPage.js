@@ -24,9 +24,6 @@ const MainPage = () => {
 
           {/* Main Options */}
           <div className="menu">
-            <button className="menu-item" onClick={() => navigate("/chatbot")}>
-              Start Interview
-            </button>
             <button className="menu-item">Improve Speaking Skills</button>
             <button className="menu-item">Personalized Learning Path</button>
             <button className="menu-item">Analytics & Feedback</button>
