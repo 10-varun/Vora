@@ -1,6 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom"; // ✅ Import useNavigate
 import "./MainPage.css"; // Ensure this file exists and is correctly linked
+import { Link } from "react-router-dom"; // Import Link for navigation
+import "./MainPage.css"; // Ensure this file exists and is correctly linked
 
 const MainPage = () => {
   const navigate = useNavigate(); // ✅ Initialize useNavigate here
@@ -36,6 +38,14 @@ const MainPage = () => {
             <button className="menu-item">Analytics & Feedback</button>
             <button className="menu-item">Customize Voice</button>
             <button className="menu-item">Settings</button>
+          {/* Login and Sign Up Buttons */}
+          <div className="menu">
+            <Link to="/login">
+              <button className="menu-item">Login</button>
+            </Link>
+            <Link to="/signup">
+              <button className="menu-item">Sign Up</button>
+            </Link>
           </div>
         </div>
       </div>
@@ -44,6 +54,7 @@ const MainPage = () => {
       <footer className="footer">
         <p>&copy; 2024 Vora | AI Interview Assistant</p>
       </footer>
+    </div>
     </div>
   );
 };
