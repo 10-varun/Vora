@@ -1,11 +1,13 @@
 import React from "react";
-import "./main.css"; // Ensure this file exists and is correctly linked
+import { useNavigate } from "react-router-dom"; // ✅ Import useNavigate
+import "./MainPage.css"; // Ensure this file exists and is correctly linked
 
 const MainPage = () => {
+  const navigate = useNavigate(); // ✅ Initialize useNavigate here
+
   return (
     <div className="Page">
       <div className="Container1">
-
         {/* Sidebar */}
         <div className="sidebar">
           <h1>Vora</h1>
@@ -26,7 +28,9 @@ const MainPage = () => {
 
           {/* Main Options */}
           <div className="menu">
-            <button className="menu-item">Start Interview</button>
+            <button className="menu-item" onClick={() => navigate("/chatbot")}>
+              Start Interview
+            </button>
             <button className="menu-item">Improve Speaking Skills</button>
             <button className="menu-item">Personalized Learning Path</button>
             <button className="menu-item">Analytics & Feedback</button>
