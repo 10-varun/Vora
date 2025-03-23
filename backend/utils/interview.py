@@ -8,18 +8,24 @@ from elevenlabs.client import ElevenLabs
 import uuid
 import re
 
+from supabase import create_client, Client
+
 # Load Environment Variables
 load_dotenv()
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=gemini_api_key)
 
+# Supabase config
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY")
+
+# Initialize Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 API_KEYS = os.getenv("ELEVEN_API_KEYS").split(",") if os.getenv("ELEVEN_API_KEYS") else []
 current_key_index = 0
 
 router = APIRouter()
-
-# In-memory chat history storage
-chat_history = {}
 
 class TextInput(BaseModel):
     text: str
@@ -32,6 +38,13 @@ class PromptInput(BaseModel):
 class FormDataInput(BaseModel):
     role: str
     jobDescription: str
+
+class ChatInput(BaseModel):
+    session_id: str
+    message: str
+
+class StatsInput(BaseModel):
+    session_id: str
 
 class EnhancedPromptInput(BaseModel):
     user_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -54,6 +67,68 @@ def format_text(text):
     text = re.sub(r'[_*~`]', '', text)
     
     return text.strip()
+
+# Function to get chat history from Supabase
+def get_chat_history(session_id):
+    try:
+        # Fetch the session record - UPDATED TABLE NAME
+        response = supabase.table("chat_history").select("*").eq("session_id", session_id).execute()
+        
+        # If session exists, return its conversation history
+        if response.data and len(response.data) > 0:
+            return {
+                "conv_history": response.data[0].get("conv_history", []),
+                "user_messages": response.data[0].get("user_messages", []),
+                "role": response.data[0].get("role", ""),
+                "job_desc": response.data[0].get("job_desc", "")
+            }
+        
+        # If session doesn't exist, return empty history
+        return {"conv_history": [], "user_messages": []}
+        
+    except Exception as e:
+        print(f"Error fetching chat history: {str(e)}")
+        return {"conv_history": [], "user_messages": []}
+
+# Function to update chat history in Supabase
+def update_chat_history(session_id, session_data):
+    try:
+        # Check if session exists - UPDATED TABLE NAME
+        response = supabase.table("chat_history").select("*").eq("session_id", session_id).execute()
+        
+        if response.data and len(response.data) > 0:
+            # Update existing session with explicit field assignments - UPDATED TABLE NAME
+            supabase.table("chat_history").update({
+                "conv_history": session_data["conv_history"],
+                "user_messages": session_data["user_messages"],
+                "role": session_data.get("role", ""),
+                "job_desc": session_data.get("job_desc", "")
+            }).eq("session_id", session_id).execute()
+        else:
+            # Create new session with explicit field assignments - UPDATED TABLE NAME
+            supabase.table("chat_history").insert({
+                "session_id": session_id,
+                "conv_history": session_data["conv_history"],
+                "user_messages": session_data["user_messages"],
+                "role": session_data.get("role", ""),
+                "job_desc": session_data.get("job_desc", "")
+            }).execute()
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error updating chat history: {str(e)}")
+        return False
+
+# Function to print chat history (for debugging)
+def print_chat_history(session_id):
+    session = get_chat_history(session_id)
+    
+    if session and session.get("conv_history"):
+        print(f"\n--- CHAT HISTORY FOR SESSION {session_id} ---")
+        for entry in session["conv_history"]:
+            print(entry)
+        print("-------------------------------------------\n")
 
 # Switch API key function for ElevenLabs
 def switch_api_key():
@@ -125,22 +200,99 @@ async def process_prompt(prompt_input: PromptInput):
         formatted_reply = format_text(chatbot_reply)
         
     except Exception as e:
-        print(f"Error generating response: {str(e)}")
         formatted_reply = "Oops! I'm having some technical difficulties."
 
     return {"reply": formatted_reply}
+
+@router.post("/chat")
+async def chat(data: ChatInput):
+    session_id = data.session_id
+    user_input = data.message
+    
+    if not session_id or not user_input:
+        raise HTTPException(status_code=400, detail="Missing session_id or message")
+    
+    # Get current session from Supabase
+    session = get_chat_history(session_id)
+    
+    # Update session with new user message
+    session["conv_history"].append(f"User: {user_input}")
+    session["user_messages"].append(user_input)
+    
+    # Update the session in Supabase
+    update_chat_history(session_id, session)
+    
+    # Print chat history after adding user message
+    print_chat_history(session_id)
+    
+    # Use the entire conversation history
+    context = "\n".join(session["conv_history"])
+    
+    prompt = f"""
+    Assume that you're Khris and you're sitting for a date.
+    Let's have a fun and engaging conversation! Be playful, witty, and genuinely interested.
+    Ask thoughtful questions and make the chat feel warm and effortless.
+    Keep responses concise and natural, like a real human conversation.
+    Pick up on interesting bits from the user's replies and ask follow-up questions.
+    No AI talk—just feel like a real person.
+
+    Here's our conversation so far:
+    {context}
+
+    AI:
+    """
+    
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content([prompt])
+        
+        if hasattr(response, 'text') and response.text.strip():
+            bot_response = response.text.strip()
+        else:
+            raise ValueError("Invalid or empty response from Gemini API")
+
+    except Exception as e:
+        bot_response = "Oops! I'm having some technical difficulties. Let's try that again!"
+
+    # Update session with AI response
+    session["conv_history"].append(f"AI: {bot_response}")
+    update_chat_history(session_id, session)
+    
+    # Print chat history after adding AI response
+    print_chat_history(session_id)
+    
+    return {"response": bot_response, "status": "success"}
     
 @router.post("/process-interview-prompt/")
 async def process_interview_prompt(prompt_input: EnhancedPromptInput):
+    # Use the auto-generated UUID as the session ID
     user_id = prompt_input.user_id
     user_prompt = prompt_input.prompt
     role = prompt_input.role.strip()
     job_desc = prompt_input.job_desc.strip()
 
-    prev_context = chat_history.get(user_id, "")
-    updated_context = f"{prev_context}\nUser: {user_prompt}"
+    # Get current session from Supabase
+    session = get_chat_history(user_id)
+    
+    # Check if we need to update role and job desc
+    if not session.get("role") and not session.get("job_desc"):
+        session["role"] = role
+        session["job_desc"] = job_desc
+        
+    # Update session with new message
+    session["conv_history"].append(f"User: {user_prompt}")
+    session["user_messages"].append(user_prompt)
+    
+    # Update the session in Supabase
+    update_chat_history(user_id, session)
+    
+    # Print chat history after adding user message
+    print_chat_history(user_id)
+    
+    # Get the complete context from the session
+    context = "\n".join(session["conv_history"])
 
-    # Ensure role and job description are explicitly injected into the prompt
+    # Create interview prompt
     prompt_interview = f"""
     Assume that you are an experienced hiring manager conducting an interview for the role of:
 
@@ -156,14 +308,10 @@ async def process_interview_prompt(prompt_input: EnhancedPromptInput):
     - Avoid markdown formatting.
 
     **Current conversation:**
-    {updated_context}
+    {context}
 
     **AI (Response in bullet points, max 120 words):**
     """
-
-    # Debugging Step: Print the prompt before sending to AI
-    print("DEBUG: Sending prompt to AI -->")
-    print(prompt_interview)
 
     try:
         model = genai.GenerativeModel("gemini-2.0-flash")
@@ -175,42 +323,43 @@ async def process_interview_prompt(prompt_input: EnhancedPromptInput):
         formatted_reply = format_text(chatbot_reply)
 
     except Exception as e:
-        print(f"Error generating response: {str(e)}")
         formatted_reply = "Oops! I'm having some technical difficulties."
 
-    # Update chat history
-    chat_history[user_id] = updated_context + f"\nAI: {formatted_reply}"
-
-    # Debugging Step: Print chat history updates
-    print(f"DEBUG: Updated chat history for {user_id} -->")
-    print(chat_history[user_id])
-
+    # Update chat history with AI response
+    session["conv_history"].append(f"AI: {formatted_reply}")
+    update_chat_history(user_id, session)
+    
+    # Print chat history after adding AI response
+    print_chat_history(user_id)
+    
     return {"reply": formatted_reply}
-
-# Your enhanced prompt session storage (could be a database in production)
-# This is just a simple in-memory store for demonstration
-enhanced_prompt_sessions = {}
 
 @router.post("/fetch-form-data")
 async def fetch_form_data(form_data: FormDataInput):
     """
-    Receive job role and description from the frontend and update the EnhancedPromptInput model.
+    Receive job role and description from the frontend and update the session in Supabase.
     Returns a session ID that can be used for subsequent prompts.
     """
     try:
         # Create a new user ID for this session
         user_id = str(uuid.uuid4())
         
-        # Create an initial EnhancedPromptInput with empty prompt but with the form data
-        enhanced_input = EnhancedPromptInput(
-            user_id=user_id,
-            prompt="",  # This will be filled later when actual prompts are sent
-            role=form_data.role,
-            job_desc=form_data.jobDescription
-        )
+        # Create new session data
+        session_data = {
+            "conv_history": [],
+            "user_messages": [],
+            "role": form_data.role,
+            "job_desc": form_data.jobDescription
+        }
         
-        # Store this session for later use
-        enhanced_prompt_sessions[user_id] = enhanced_input
+        # Save to Supabase
+        update_chat_history(user_id, session_data)
+        
+        # Print the newly created session
+        print(f"\n--- NEW SESSION CREATED: {user_id} ---")
+        print(f"Role: {form_data.role}")
+        print(f"Job Description: {form_data.jobDescription}")
+        print("-------------------------------------------\n")
         
         # Return the user_id and the updated model information
         return {
@@ -218,10 +367,84 @@ async def fetch_form_data(form_data: FormDataInput):
             "message": "Form data received successfully",
             "session_id": user_id,
             "data": {
-                "role": enhanced_input.role,
-                "job_desc": enhanced_input.job_desc
+                "role": form_data.role,
+                "job_desc": form_data.jobDescription
             }
         }
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing form data: {str(e)}")
+
+@router.post("/interview-stats/")
+async def generate_interview_stats(data: StatsInput):
+    user_id = data.session_id
+    
+    # Get session from Supabase
+    session = get_chat_history(user_id)
+    
+    if not session or not session.get("conv_history"):
+        raise HTTPException(status_code=404, detail="No chat history found for this user")
+
+    # Get the complete conversation string from the session
+    context = "\n".join(session["conv_history"])
+    
+    if not context:
+        raise HTTPException(status_code=404, detail="No chat history found for this user")
+        
+    # Print current chat history before generating stats
+    print(f"\n--- GENERATING STATS FOR SESSION {user_id} ---")
+    print_chat_history(user_id)
+
+    # Fixed prompt to avoid f-string issues with the dictionary example
+    stats_prompt = f"""
+    This is a user's responses from an interview. Your task is to analyze the following conversation and evaluate the user's performance in these categories:
+    
+    {context}
+    
+    Evaluate based on these categories:
+    Communication Skills: Assess the clarity, fluency, grammar, and coherence of the user's responses. Determine if the user effectively conveys their thoughts.
+    Technical Domain Knowledge (TD Knowledge): Evaluate the user's understanding of technical concepts relevant to the interview. Check for correctness, depth, and confidence in explanations.
+    Problem-Solving and Critical Thinking (PS_CT): Identify instances where the user demonstrates logical reasoning, structured problem-solving, and innovative thinking.
+    Confidence and Attitude (CF_Attitude): Analyze the user's tone, willingness to engage, and overall confidence in responses. Consider whether they remain composed under challenging questions.
+    
+    Return a dictionary with this format:
+    {{
+        "communication_skills": "Yes" or "No",
+        "td_knowledge": "Yes" or "No",
+        "ps_ct": "Yes" or "No",
+        "cf_attitude": "Yes" or "No"
+    }}
+    """
+
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content([stats_prompt])
+
+        if not hasattr(response, "text"):
+            raise ValueError("Unexpected API response format")
+
+        text = response.text
+        
+        # Parse the returned JSON into a Python dict
+        import json
+        try:
+            # Find JSON-like content in the text
+            import re
+            json_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if json_match:
+                json_text = json_match.group(0)
+                formatted_stats = json.loads(json_text)
+            else:
+                formatted_stats = {"error": "Could not parse AI response"}
+        except json.JSONDecodeError:
+            formatted_stats = {"error": "Invalid JSON in AI response"}
+
+    except Exception as e:
+        formatted_stats = {"error": str(e)}
+        
+    # Print the generated stats
+    print(f"\n--- STATS GENERATED FOR SESSION {user_id} ---")
+    print(formatted_stats)
+    print("-------------------------------------------\n")
+
+    return {"stats": formatted_stats, "status": "success" if "error" not in formatted_stats else "error"}
