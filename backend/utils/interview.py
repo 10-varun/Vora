@@ -28,6 +28,10 @@ class TextInput(BaseModel):
 
 class PromptInput(BaseModel):
     prompt: str
+    
+class FormDataInput(BaseModel):
+    role: str
+    jobDescription: str
 
 class EnhancedPromptInput(BaseModel):
     user_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -144,6 +148,7 @@ async def process_interview_prompt(prompt_input: EnhancedPromptInput):
     **Job Description:** {job_desc}
 
     **Instructions:**
+    - Your name is Khris.
     - Conduct the interview professionally and naturally.
     - Keep responses concise and structured (max 120 words).
     - Present answers in a **bullet-point format** using "•".
@@ -181,3 +186,42 @@ async def process_interview_prompt(prompt_input: EnhancedPromptInput):
     print(chat_history[user_id])
 
     return {"reply": formatted_reply}
+
+# Your enhanced prompt session storage (could be a database in production)
+# This is just a simple in-memory store for demonstration
+enhanced_prompt_sessions = {}
+
+@router.post("/fetch-form-data")
+async def fetch_form_data(form_data: FormDataInput):
+    """
+    Receive job role and description from the frontend and update the EnhancedPromptInput model.
+    Returns a session ID that can be used for subsequent prompts.
+    """
+    try:
+        # Create a new user ID for this session
+        user_id = str(uuid.uuid4())
+        
+        # Create an initial EnhancedPromptInput with empty prompt but with the form data
+        enhanced_input = EnhancedPromptInput(
+            user_id=user_id,
+            prompt="",  # This will be filled later when actual prompts are sent
+            role=form_data.role,
+            job_desc=form_data.jobDescription
+        )
+        
+        # Store this session for later use
+        enhanced_prompt_sessions[user_id] = enhanced_input
+        
+        # Return the user_id and the updated model information
+        return {
+            "status": "success",
+            "message": "Form data received successfully",
+            "session_id": user_id,
+            "data": {
+                "role": enhanced_input.role,
+                "job_desc": enhanced_input.job_desc
+            }
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing form data: {str(e)}")
