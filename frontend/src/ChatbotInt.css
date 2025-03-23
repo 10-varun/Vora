@@ -520,6 +520,7 @@
   /* Chat Input */
   .chat-input {
     flex: 1;
+    text-align: left !important; /* Added !important to override any other rules */
     padding: 14px;
     border: none;
     border-radius: var(--radius-sm);
@@ -528,6 +529,14 @@
     outline: none;
     color: var(--text);
     transition: var(--transition);
+    direction: ltr; /* Ensures left-to-right text direction */
+    justify-content: flex-start; /* For flex containers */
+    align-items: flex-start; /* For flex containers */
+  }
+  
+  /* Targeting placeholder text as well */
+  .chat-input::placeholder {
+    text-align: left;
   }
   
   .chat-input:focus {
