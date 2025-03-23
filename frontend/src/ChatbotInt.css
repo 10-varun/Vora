@@ -627,6 +627,12 @@
   .dark-theme .input-container {
     background: var(--bg-light);
   }
+
+  .message-content {
+    text-align: left; /* Ensures the text inside the bubble is left-aligned */
+    max-width: 80%;
+    word-wrap: break-word;
+  }
   
   .dark-theme .search-input,
   .dark-theme .chat-input {
