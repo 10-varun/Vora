@@ -1,24 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 from dotenv import load_dotenv
 import requests
 import google.generativeai as genai
 from elevenlabs.client import ElevenLabs
+import uuid
+import re
 
 # Load Environment Variables
 load_dotenv()
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=gemini_api_key)
 
-API_KEYS = os.getenv("ELEVEN_API_KEYS").split(",")
+API_KEYS = os.getenv("ELEVEN_API_KEYS").split(",") if os.getenv("ELEVEN_API_KEYS") else []
 current_key_index = 0
 
 router = APIRouter()
 
 # In-memory chat history storage
 chat_history = {}
-user_sessions = {} # For stats
 
 class TextInput(BaseModel):
     text: str
@@ -26,13 +27,29 @@ class TextInput(BaseModel):
     model_id: str = "eleven_multilingual_v2"
 
 class PromptInput(BaseModel):
-    user_id: str
     prompt: str
-    role: str
-    job_desc: str
 
-class StatsInput(BaseModel):
-    session_id: str
+class EnhancedPromptInput(BaseModel):
+    user_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    prompt: str
+    role: str = "Software Engineer"
+    job_desc: str = "We are looking for a skilled Software Engineer with experience in Python, JavaScript, and cloud technologies. The ideal candidate should have 3+ years of experience developing web applications and be familiar with modern frameworks."
+
+# Function to format the response text
+def format_text(text):
+    # Remove markdown bold markers (**)
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    
+    # Convert any markdown bullet points to plain bullet points
+    text = re.sub(r'^\s*\*\s+', '• ', text, flags=re.MULTILINE)
+    
+    # Convert numbered lists with markdown formatting to plain numbered lists
+    text = re.sub(r'^\s*\d+\.\s+', lambda m: m.group(0), text, flags=re.MULTILINE)
+    
+    # Replace any remaining markdown with plain text
+    text = re.sub(r'[_*~`]', '', text)
+    
+    return text.strip()
 
 # Switch API key function for ElevenLabs
 def switch_api_key():
@@ -95,111 +112,72 @@ async def generate_speech_route(input_data: TextInput):
 
 @router.post("/process-prompt/")
 async def process_prompt(prompt_input: PromptInput):
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content([prompt_input.prompt])
+        chatbot_reply = response.text.strip() if response and response.text.strip() else "Sorry, I couldn't generate a response."
+        
+        # Format the response to remove markdown and structure points
+        formatted_reply = format_text(chatbot_reply)
+        
+    except Exception as e:
+        print(f"Error generating response: {str(e)}")
+        formatted_reply = "Oops! I'm having some technical difficulties."
+
+    return {"reply": formatted_reply}
+    
+@router.post("/process-interview-prompt/")
+async def process_interview_prompt(prompt_input: EnhancedPromptInput):
     user_id = prompt_input.user_id
     user_prompt = prompt_input.prompt
+    role = prompt_input.role.strip()
+    job_desc = prompt_input.job_desc.strip()
 
     prev_context = chat_history.get(user_id, "")
     updated_context = f"{prev_context}\nUser: {user_prompt}"
 
+    # Ensure role and job description are explicitly injected into the prompt
     prompt_interview = f"""
-    Assume that you're the interviewer and you're conducting a job interview for the following role:
+    Assume that you are an experienced hiring manager conducting an interview for the role of:
 
-    **Role:** {prompt_input.role}
+    **Role:** {role}
+    **Job Description:** {job_desc}
 
-    **Job Description:** {prompt_input.job_desc}
+    **Instructions:**
+    - Conduct the interview professionally and naturally.
+    - Keep responses concise and structured (max 120 words).
+    - Present answers in a **bullet-point format** using "•".
+    - Ensure **clear spacing** between points.
+    - Avoid markdown formatting.
 
-    Do not assume a name, post or company name.
-    Have a professional and engaging conversation! Be clear and concise.
-    Ask thoughtful questions tailored to the job description and make the chat feel focused and productive.
-    Keep responses concise and clear, like a real professional conversation.
-    Pick up on interesting bits from the candidate's replies and ask relevant follow-up questions that probe their experience and skills in relation to the role.
-    No AI talk—just feel like a real interviewer conducting an interview for this particular position.
-
-    Here's our conversation so far:
+    **Current conversation:**
     {updated_context}
 
-    AI:
+    **AI (Response in bullet points, max 120 words):**
     """
+
+    # Debugging Step: Print the prompt before sending to AI
+    print("DEBUG: Sending prompt to AI -->")
+    print(prompt_interview)
 
     try:
         model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content([prompt_interview])
+
         chatbot_reply = response.text.strip() if response and response.text.strip() else "Sorry, I couldn't generate a response."
-    except Exception:
-        chatbot_reply = "Oops! I'm having some technical difficulties."
-
-    chat_history[user_id] = updated_context + f"\nAI: {chatbot_reply}"
-
-    # Update user session for stats
-    if user_id not in user_sessions:
-        user_sessions[user_id] = {"user_messages": []}
-    user_sessions[user_id]["user_messages"].append(user_prompt)
-
-    return {"reply": chatbot_reply}
-
-@router.post("/stats/")
-async def generate_stats(stats_input: StatsInput):
-    session_id = stats_input.session_id
-
-    if not session_id or session_id not in user_sessions:
-        raise HTTPException(status_code=400, detail={"error": "Invalid or missing session_id", "status": "error"})
-
-    session = user_sessions[session_id]
-    user_text = "\n".join(session["user_messages"])
-
-    stats_prompt = f"""
-    Analyze the following conversation **ONLY based on the user's messages**.
-    Assess the user's performance in the following areas based on the provided conversation.
-    Provide a **Yes** or **No** assessment for each category.
-
-    **Communication Skills:** (Yes/No)
-    **Technical & Domain Knowledge:** (Yes/No)
-    **Problem-Solving & Critical Thinking:** (Yes/No)
-    **Cultural Fit & Attitude:** (Yes/No)
-
-    Here are the user's messages:
-    {user_text}
-
-    Ensure the response follows this format exactly.
-    """
-
-    formatted_stats = {
-        "Communication Skills": "No",
-        "Technical & Domain Knowledge": "No",
-        "Problem-Solving & Critical Thinking": "No",
-        "Cultural Fit & Attitude": "No"
-    }
-
-    try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content([stats_prompt])
-
-        if not hasattr(response, "text"):
-            raise ValueError("Unexpected API response format")
-
-        text = response.text
-        lines = text.split("\n")
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            if line.startswith("**Communication Skills:**"):
-                formatted_stats["Communication Skills"] = line.split(":")[-1].strip().lower().capitalize()
-            elif line.startswith("**Technical & Domain Knowledge:**"):
-                formatted_stats["Technical & Domain Knowledge"] = line.split(":")[-1].strip().lower().capitalize()
-            elif line.startswith("**Problem-Solving & Critical Thinking:**"):
-                formatted_stats["Problem-Solving & Critical Thinking"] = line.split(":")[-1].strip().lower().capitalize()
-            elif line.startswith("**Cultural Fit & Attitude:**"):
-                formatted_stats["Cultural Fit & Attitude"] = line.split(":")[-1].strip().lower().capitalize()
-
-        for key in formatted_stats:
-            if formatted_stats[key] not in ("Yes", "No"):
-                formatted_stats[key] = "No"  # ensure only yes or no is returned.
+        
+        # Ensure markdown formatting is removed and bullet points are formatted
+        formatted_reply = format_text(chatbot_reply)
 
     except Exception as e:
-        print(f"Stats API Error: {str(e)}")
-        formatted_stats = {"error": str(e)}
+        print(f"Error generating response: {str(e)}")
+        formatted_reply = "Oops! I'm having some technical difficulties."
 
-    return {"stats": formatted_stats, "status": "success" if "error" not in formatted_stats else "error"}
+    # Update chat history
+    chat_history[user_id] = updated_context + f"\nAI: {formatted_reply}"
+
+    # Debugging Step: Print chat history updates
+    print(f"DEBUG: Updated chat history for {user_id} -->")
+    print(chat_history[user_id])
+
+    return {"reply": formatted_reply}

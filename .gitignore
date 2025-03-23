@@ -3,3 +3,6 @@ backend/.env
 backend/__pycache__
 backend/utils/__pycache__
 output
+backend/.venv
+
+frontend/venv
