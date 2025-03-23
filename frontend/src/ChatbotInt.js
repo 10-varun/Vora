@@ -4,7 +4,7 @@ import { Send, Home, ArrowLeft, Menu, X, Settings, Moon, Sun, Bell, Search, User
 import "./ChatbotInt.css";
 
 const Chatbot = () => {
-  const navigate = useNavigate(); // ✅ Correctly placed useNavigate at the top
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([
     { text: "Hello! How can I assist you today?", sender: "bot" }
   ]);
@@ -21,27 +21,47 @@ const Chatbot = () => {
     { id: "chat", name: "Chat Assistant" }
   ]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!input.trim()) return;
     const newMessages = [...messages, { text: input, sender: "user" }];
     setMessages(newMessages);
     setInput("");
-
-    // Simulate bot response with loading
+  
+    // Show typing indicator
     setMessages((prevMessages) => [
       ...prevMessages,
       { text: "", sender: "bot", isTyping: true }
     ]);
-
-    setTimeout(() => {
+  
+    try {
+      // Create a simplified request body with just the prompt
+      const requestBody = {
+        prompt: input
+      };
+  
+      const response = await fetch("http://localhost:8000/process-prompt/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+  
+      const data = await response.json();
+      const botResponse = data.reply || "I'm still learning!";
+  
       setMessages((prevMessages) => {
         const updatedMessages = [...prevMessages];
         updatedMessages.pop(); // Remove typing indicator
-        return [...updatedMessages, { text: "I'm still learning!", sender: "bot" }];
+        return [...updatedMessages, { text: botResponse, sender: "bot" }];
       });
-    }, 1500);
-    
-    // Focus input after sending
+    } catch (error) {
+      console.error("Error fetching response:", error);
+      setMessages((prevMessages) => {
+        const updatedMessages = [...prevMessages];
+        updatedMessages.pop(); // Remove typing indicator
+        return [...updatedMessages, { text: "Error retrieving response!", sender: "bot" }];
+      });
+    }
+  
     inputRef.current.focus();
   };
 
@@ -56,12 +76,55 @@ const Chatbot = () => {
       setNavHistory(newHistory);
       setActiveSection(newHistory[newHistory.length - 1]?.id || "home");
     } else {
-      navigate("/"); // ✅ Redirects to main page
+      navigate("/");
     }
   };
 
   const toggleNav = () => {
     setIsNavExpanded(!isNavExpanded);
+  };
+
+  // Function to render message text with proper line breaks for bullet points
+  const renderMessageText = (text) => {
+    if (!text) return null;
+    
+    // Split the text by newlines
+    const lines = text.split('\n');
+    
+    // Find the first bullet point index
+    const firstBulletIndex = lines.findIndex(line => line.trim().startsWith('•'));
+    
+    return (
+      <div className="message-text-wrapper">
+        {lines.map((line, i) => {
+          // Check if this is a bullet point line
+          const isBullet = line.trim().startsWith('•');
+          const isFirstBullet = isBullet && i === firstBulletIndex;
+          const isEmptyBullet = line.trim() === '•' || line.trim() === '• ';
+          
+          // Skip empty bullet points completely
+          if (isEmptyBullet) {
+            return null;
+          }
+          
+          // For the first bullet point, remove the bullet character
+          let displayLine = line;
+          if (isFirstBullet) {
+            displayLine = line.replace(/^(\s*)(•)(\s*)/, '$1$3');
+          }
+          
+          return (
+            <React.Fragment key={i}>
+              {isBullet ? 
+                <div className={`bullet-point-line ${isFirstBullet ? 'first-point-no-bullet' : ''}`}>
+                  {displayLine}
+                </div> : 
+                <div className="regular-line">{line}</div>}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -165,7 +228,9 @@ const Chatbot = () => {
                   <span></span><span></span><span></span>
                 </div>
               ) : (
-                <span>{msg.text}</span>
+                <div className="message-content">
+                  {renderMessageText(msg.text)}
+                </div>
               )}
               <div className="message-time">
                 {!msg.isTyping && new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -181,7 +246,7 @@ const Chatbot = () => {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message here..."
             className="chat-input"
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()} // ✅ Fixed key event
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             ref={inputRef}
           />
           <button 
