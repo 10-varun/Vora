@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
-import { useNavigate } from 'react-router-dom'; // Import for navigation
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [activeCategory, setActiveCategory] = useState(null);
-  const navigate = useNavigate(); // Initialize navigation
+  const navigate = useNavigate();
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [jobTitle, setJobTitle] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
+  const [currentPathId, setCurrentPathId] = useState(null);
   
   // Initial learning path data structure with useState for state management
   const [learningPathsData, setLearningPathsData] = useState({
@@ -56,7 +60,7 @@ const Dashboard = () => {
     return Math.round((completedCount / levels.length) * 100);
   };
 
-  // Update level completion status - now properly updates state
+  // Update level completion status
   const toggleLevelCompletion = (categoryKey, pathIndex, levelIndex) => {
     setLearningPathsData(prevData => {
       // Create a deep copy of the state
@@ -68,15 +72,38 @@ const Dashboard = () => {
     });
   };
 
-  // New function to handle continue button click
+  // Handle continue button click - modified to handle different categories
   const handleContinueClick = (category, pathId) => {
     if (category === 'interview') {
-      // Navigate to chatbot page for interview category
-      navigate('/chatbot');
+      // For interview category, show the interview-specific modal
+      setCurrentPathId(pathId);
+      setShowInterviewModal(true);
     } else {
       // For other categories, show an alert that the page is not ready
       alert('This feature is coming soon!');
     }
+  };
+
+  // Handle modal next button click
+  const handleInterviewStart = () => {
+    if (jobTitle.trim() === '' || jobDescription.trim() === '') {
+      alert('Please fill in both fields');
+      return;
+    }
+
+    // Store the interview data
+    const interviewData = {
+      role: jobTitle,
+      jobDescription: jobDescription
+    };
+    
+    localStorage.setItem('interviewData', JSON.stringify(interviewData));
+    
+    // Close modal
+    setShowInterviewModal(false);
+    
+    // Navigate to the chatbot page
+    navigate('/chatbot', { state: interviewData });
   };
 
   // Category descriptions
@@ -121,7 +148,10 @@ const Dashboard = () => {
                       <input 
                         type="checkbox" 
                         checked={level.completed} 
-                        onChange={() => toggleLevelCompletion(category, pathIndex, levelIndex)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleLevelCompletion(category, pathIndex, levelIndex);
+                        }}
                       />
                       <span className="checkmark"></span>
                       <span className="level-name">{level.name}</span>
@@ -132,7 +162,10 @@ const Dashboard = () => {
               
               <button 
                 className="btn btn-secondary btn-sm"
-                onClick={() => handleContinueClick(category, path.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleContinueClick(category, path.id);
+                }}
               >
                 Continue
               </button>
@@ -223,6 +256,61 @@ const Dashboard = () => {
           )}
         </div>
       </section>
+      
+      {/* Interview Modal */}
+      {showInterviewModal && (
+        <div className="modal-overlay">
+          <div className="modal-container">
+            <div className="modal-header">
+              <h3>Job Details</h3>
+              <button 
+                className="modal-close-btn"
+                onClick={() => setShowInterviewModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label htmlFor="jobTitle">Job Title</label>
+                <input
+                  type="text"
+                  id="jobTitle"
+                  placeholder="E.g. Software Engineer, Product Manager"
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  style={{ textAlign: 'left' }}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="jobDescription">Job Description</label>
+                <textarea
+                  id="jobDescription"
+                  placeholder="Paste the job description here"
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  rows="4"
+                  style={{ textAlign: 'left' }}
+                ></textarea>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowInterviewModal(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleInterviewStart}
+              >
+                Start Practice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 
