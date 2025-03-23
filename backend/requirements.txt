@@ -5,3 +5,7 @@ supabase
 jwt
 fastapi-sessions
 itsdangerous
+uvicorn
+requests
+pydantic
+elevenlabs
