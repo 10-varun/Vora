@@ -9,11 +9,9 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    
     if (!email || !password) {
       alert("Please enter both email and password.");
       return;
@@ -22,16 +20,14 @@ function Login() {
     setLoading(true);
 
     try {
-    
+      // Sign in with Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      
       console.log("Login Response:", data, error);
 
-    
       if (error) {
         console.error("Login Error:", error.message);
         alert("Error logging in: " + error.message);
@@ -39,20 +35,49 @@ function Login() {
         return;
       }
 
-      
       if (!data.user.confirmed_at) {
         alert("Please confirm your email before logging in.");
         setLoading(false);
         return;
       }
 
+      // Extract the UUID from the user data
+      const userUuid = data.user.id;
+      console.log("User UUID:", userUuid);
+
+      // Send the UUID to your FastAPI backend
+      try {
+        const backendResponse = await fetch('http://localhost:8000/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${data.session.access_token}`
+          },
+          body: JSON.stringify({
+            uuid: userUuid,
+            email: data.user.email
+          })
+        });
+
+        if (!backendResponse.ok) {
+          const errorData = await backendResponse.json();
+          console.error("Backend Error:", errorData);
+        } else {
+          const backendData = await backendResponse.json();
+          console.log("Backend Response:", backendData);
+          
+          // Store UUID for use throughout the app
+          localStorage.setItem('userUuid', userUuid);
+        }
+      } catch (backendErr) {
+        console.error("Error connecting to backend:", backendErr);
+      }
       
       console.log("Logged in successfully:", data);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       console.error("Unexpected Error:", err); 
 
-     
       if (err instanceof Error) {
         alert(`An unexpected error occurred: ${err.message}\nStack Trace: ${err.stack || "No stack trace available."}`);
       } else {

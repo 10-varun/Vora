@@ -30,7 +30,7 @@ function Signup() {
     alert("Sign-up successful! Check your email to verify your account.");
 
     // Redirect to login page after successful signup
-    navigate("/login");
+    navigate("/dashboard");
   };
 
   // Handle Google Signup (OAuth)
@@ -38,7 +38,7 @@ function Signup() {
     const { user, session, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin + "/", // Redirect to login page after Google authentication
+        redirectTo: window.location.origin + "/dashboard", // Redirect to login page after Google authentication
       },
     });
 
@@ -52,13 +52,13 @@ function Signup() {
       alert("Successfully signed up with Google! You are being redirected to the login page.");
       
       // After Google login/signup, navigate to the login page
-      navigate("/login");
+      navigate("/dashboard");
     }
 
     // If session exists, it means the user is logged in, and we can redirect to the home page
     if (session) {
       console.log("User session exists:", session);
-      navigate("/");  // Navigate to home/dashboard or wherever you want
+      navigate("/dashboard");  // Navigate to home/dashboard or wherever you want
     }
   };
 
