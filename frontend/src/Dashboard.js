@@ -10,6 +10,7 @@ const Dashboard = () => {
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [currentPathId, setCurrentPathId] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Initial learning path data structure with useState for state management
   const [learningPathsData, setLearningPathsData] = useState({
@@ -84,26 +85,53 @@ const Dashboard = () => {
     }
   };
 
-  // Handle modal next button click
-  const handleInterviewStart = () => {
+  // Handle modal next button click - Updated to send data to FastAPI endpoint
+  const handleInterviewStart = async () => {
     if (jobTitle.trim() === '' || jobDescription.trim() === '') {
       alert('Please fill in both fields');
       return;
     }
 
-    // Store the interview data
-    const interviewData = {
+    // Prepare the form data
+    const formData = {
       role: jobTitle,
       jobDescription: jobDescription
     };
     
-    localStorage.setItem('interviewData', JSON.stringify(interviewData));
-    
-    // Close modal
-    setShowInterviewModal(false);
-    
-    // Navigate to the chatbot page
-    navigate('/chatbot', { state: interviewData });
+    try {
+      setIsLoading(true);
+      
+      // Send data to FastAPI backend
+      const response = await fetch('http://localhost:8000/fetch-form-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Success:', data);
+      
+      // Store the interview data locally as well
+      localStorage.setItem('interviewData', JSON.stringify(formData));
+      
+      // Close modal
+      setShowInterviewModal(false);
+      
+      // Navigate to the chatbot page
+      navigate('/chatbot', { state: { ...formData, responseData: data } });
+      
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      alert('There was an error submitting your data. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Category descriptions
@@ -304,8 +332,9 @@ const Dashboard = () => {
               <button 
                 className="btn btn-primary"
                 onClick={handleInterviewStart}
+                disabled={isLoading}
               >
-                Start Practice
+                {isLoading ? 'Processing...' : 'Start Practice'}
               </button>
             </div>
           </div>

@@ -206,7 +206,7 @@ const Chatbot = () => {
             </button>
             <div className="breadcrumb-navigation">
               {navHistory.length > 1 && (
-                <button className="nav-button back-button" onClick={() => navigate("/")}>
+                <button className="nav-button back-button" onClick={() => navigate("/dashboard")}>
                 <ArrowLeft size={18} />
               </button>
               )}
