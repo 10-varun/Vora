@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Send, Home, ArrowLeft, Menu, X, Settings, Moon, Sun, Bell, Search, User, MessageSquare } from "lucide-react";
+import { Send, Home, ArrowLeft, Menu, X, Settings, Moon, Sun, Bell, Search, User, MessageSquare, Volume2, VolumeX } from "lucide-react";
 import "./ChatbotInt.css";
 
 const Chatbot = () => {
   const navigate = useNavigate();
   const [messages, setMessages] = useState([
-    { text: "Hello! How can I assist you today?", sender: "bot" }
+    { text: "Hello! Welcome to your Interview. Are you nervous? Tell us a bit about yourself", sender: "bot" }
   ]);
   const [input, setInput] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isNavExpanded, setIsNavExpanded] = useState(false);
   const [activeSection, setActiveSection] = useState("chat");
+  const [isMuted, setIsMuted] = useState(false);
   const chatBoxRef = useRef(null);
   const inputRef = useRef(null);
+  const audioRef = useRef(null);
 
   // Mock navigation history
   const [navHistory, setNavHistory] = useState([
@@ -39,7 +41,7 @@ const Chatbot = () => {
         prompt: input
       };
   
-      const response = await fetch("http://localhost:8000/process-prompt/", {
+      const response = await fetch("http://localhost:8000/process-interview-prompt/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
@@ -53,6 +55,11 @@ const Chatbot = () => {
         updatedMessages.pop(); // Remove typing indicator
         return [...updatedMessages, { text: botResponse, sender: "bot" }];
       });
+
+      // Generate and play audio for the bot response if not muted
+      if (!isMuted) {
+        generateAndPlayAudio(botResponse);
+      }
     } catch (error) {
       console.error("Error fetching response:", error);
       setMessages((prevMessages) => {
@@ -63,6 +70,47 @@ const Chatbot = () => {
     }
   
     inputRef.current.focus();
+  };
+
+  const generateAndPlayAudio = async (text) => {
+    try {
+      const requestBody = {
+        text: text,
+        voice_id: "JBFqnCBsd6RMkjVDRZzb", // Default voice ID
+        model_id: "eleven_multilingual_v2" // Default model ID
+      };
+
+      const response = await fetch("http://localhost:8000/generate-speech/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Speech generation failed: ${response.status}`);
+      }
+
+      // Create a blob from the audio response
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      // Play the audio
+      if (audioRef.current) {
+        audioRef.current.src = audioUrl;
+        audioRef.current.play().catch(e => {
+          console.error("Audio playback failed:", e);
+        });
+      }
+    } catch (error) {
+      console.error("Error generating or playing audio:", error);
+    }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
   };
 
   const toggleDarkMode = () => {
@@ -137,8 +185,18 @@ const Chatbot = () => {
     document.body.classList.toggle('dark-mode', isDarkMode);
   }, [isDarkMode]);
 
+  // Effect to generate audio for the initial bot message when component mounts
+  useEffect(() => {
+    if (messages.length > 0 && messages[0].sender === "bot" && !isMuted) {
+      generateAndPlayAudio(messages[0].text);
+    }
+  }, []);
+
   return (
     <div className={`app-container ${isDarkMode ? 'dark-theme' : 'light-theme'}`}>
+      {/* Audio element for playing speech */}
+      <audio ref={audioRef} className="hidden-audio" />
+      
       {/* Modern Navbar */}
       <nav className="app-navbar">
         <div className="navbar-main">
@@ -173,6 +231,9 @@ const Chatbot = () => {
           </div>
           
           <div className="navbar-right">
+            <button className="nav-button icon-button" onClick={toggleMute}>
+              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </button>
             <button className="nav-button icon-button" onClick={toggleDarkMode}>
               {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
